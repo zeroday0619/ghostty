@@ -1,0 +1,13 @@
+features:
+  drag-handle:
+    name: drag-handle
+    description: |
+      Add macOS exclusive drag-handle config. (#13706, #13709)
+  horizontal-scroll:
+    name: Horizontal Scroll
+    description: |
+      Correct horizontal scroll behaviour on macOS.
+  pull-ghostty-org-13364:
+    name: pull-ghostty-org-13364
+    description: |
+      Pull #13364: macOS: free surface synchronously in deinit on main thread

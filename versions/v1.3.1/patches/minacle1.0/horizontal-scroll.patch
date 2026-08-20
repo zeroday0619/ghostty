@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mina Her <minacle@live.com>
+Date: Thu, 20 Aug 2026 07:08:06 +0900
+Subject: [PATCH] Correct horizontal scrolling direction
+
+- Reverse the horizontal scroll-wheel delta
+- Preserve vertical scrolling and precise-scroll detection
+
+Rationale: Align horizontal trackpad and mouse scrolling with expected macOS behaviour without affecting vertical scrolling.
+
+diff --git a/macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift b/macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift
+index 3129acf..293c7c1 100644
+--- a/macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift	
++++ b/macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift	
+@@ -1034,7 +1034,7 @@ extension Ghostty {
+         override func scrollWheel(with event: NSEvent) {
+             guard let surfaceModel else { return }
+ 
+-            var x = event.scrollingDeltaX
++            var x = -event.scrollingDeltaX
+             var y = event.scrollingDeltaY
+             let precision = event.hasPreciseScrollingDeltas
+ 
