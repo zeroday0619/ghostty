@@ -1,3 +1,5 @@
+inherits: "minacle1.0"
+
 features:
   ssh-terminfo-fallback:
     name: SSH terminfo fallback
