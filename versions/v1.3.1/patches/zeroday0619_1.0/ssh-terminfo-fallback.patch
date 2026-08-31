@@ -1,0 +1,368 @@
+From b425723775aa3d9d29a0a33ea87291c3ba0826fd Mon Sep 17 00:00:00 2001
+From: Euiseo Cha <escha@zeroday0619.dev>
+Date: Mon, 31 Aug 2026 15:18:41 +0900
+Subject: [PATCH] fix(ssh): prevent unsupported Ghostty TERM on remote hosts
+
+Use xterm-256color as the default terminal type and enable the portable
+SSH environment fallback by default. This covers ordinary shell wrappers,
+absolute ssh paths, unsupported shells, and shell integration bypasses
+without requiring Ghostty terminfo on the remote host.
+
+Cached installation records can outlive remote hosts and home
+directories. Discard unverified cache hits, stop creating new trust-only
+cache records, and require a post-install infocmp check before selecting
+xterm-ghostty. Preserve user SetEnv configuration while forwarding
+Ghostty environment metadata. Users can still opt into xterm-ghostty with
+an explicit `term` configuration when every target supports that entry.
+
+Validation:
+- Passed Bash 3.2 stale-cache, install-success, and install-failure behavior tests.
+- Passed Zsh 5.9 stale-cache, install-success, and install-failure behavior tests.
+- Passed bash -n, zsh -n, ShellCheck, and git diff --check.
+- Fish, Nushell, Elvish, and Zig execution were not performed because the required tools are unavailable.
+
+Assisted-by: Codex:gpt-daybreak-blue-latest
+---
+ src/build/mdgen/ghostty_1_footer.md             |  2 +-
+ src/config/Config.zig                           | 17 ++++++++++-------
+ src/shell-integration/bash/ghostty.bash         | 13 ++++++-------
+ .../elvish/lib/ghostty-integration.elv          | 13 ++++++-------
+ .../ghostty-shell-integration.fish              | 15 ++++++---------
+ .../nushell/vendor/autoload/ghostty.nu          | 12 +++++++-----
+ src/shell-integration/zsh/ghostty-integration   | 13 ++++++-------
+ src/termio/shell_integration.zig                |  9 +++++++++
+ 8 files changed, 51 insertions(+), 43 deletions(-)
+
+diff --git a/src/build/mdgen/ghostty_1_footer.md b/src/build/mdgen/ghostty_1_footer.md
+index a63a85fd4..e39278c0e 100644
+--- a/src/build/mdgen/ghostty_1_footer.md
++++ b/src/build/mdgen/ghostty_1_footer.md
+@@ -18,7 +18,7 @@ for configuration files.
+ 
+ **TERM**
+ 
+-: Defaults to `xterm-ghostty`. Can be configured with the `term` configuration option.
++: Defaults to `xterm-256color`. Can be configured with the `term` configuration option.
+ 
+ **GHOSTTY_RESOURCES_DIR**
+ 
+diff --git a/src/config/Config.zig b/src/config/Config.zig
+index 278ffd7e2..d88309a8e 100644
+--- a/src/config/Config.zig
++++ b/src/config/Config.zig
+@@ -2803,15 +2803,18 @@ keybind: Keybinds = .{},
+ ///     remote hosts and propagates COLORTERM, TERM_PROGRAM, and TERM_PROGRAM_VERSION.
+ ///     Whether or not these variables will be accepted by the remote host(s) will
+ ///     depend on whether or not the variables are allowed in their sshd_config.
++///     This feature is enabled by default so remote hosts do not need Ghostty's
++///     terminfo entry for ordinary SSH sessions.
+ ///     (Available since: 1.2.0)
+ ///
+ ///   * `ssh-terminfo` - Enable automatic terminfo installation on remote hosts.
+ ///     Attempts to install Ghostty's terminfo entry using `infocmp` and `tic` when
+ ///     connecting to hosts that lack it. Requires `infocmp` to be available locally
+-///     and `tic` to be available on remote hosts. Once terminfo is installed on a
+-///     remote host, it will be automatically "cached" to avoid repeat installations.
+-///     If desired, the `+ssh-cache` CLI action can be used to manage the installation
+-///     cache manually using various arguments.
++///     and `tic` to be available on remote hosts. A cached installation is never
++///     trusted without verification because remote home directories and hosts can
++///     be replaced independently of the local cache. Cached entries are discarded
++///     before they can select `xterm-ghostty`, and successful installations are
++///     verified with `infocmp` before use.
+ ///     (Available since: 1.2.0)
+ ///
+ ///   * `path` - Add Ghostty's binary directory to PATH. This ensures the `ghostty`
+@@ -3682,7 +3685,7 @@ else
+ /// features. An option exists in vim to modify this: `:set
+ /// keyprotocol=ghostty:kitty`, however a bug in the implementation prevents it
+ /// from working properly. https://github.com/vim/vim/pull/13211 fixes this.
+-term: []const u8 = "xterm-ghostty",
++term: []const u8 = "xterm-256color",
+ 
+ /// String to send when we receive `ENQ` (`0x05`) from the command that we are
+ /// running. Defaults to an empty string if not set.
+@@ -4519,7 +4522,7 @@ pub fn finalize(self: *Config) !void {
+     // Prevent setting TERM to an empty string
+     if (self.term.len == 0) {
+         // HACK: See comment above at definition
+-        self.term = "xterm-ghostty";
++        self.term = "xterm-256color";
+     }
+ 
+     // The default for the working directory depends on the system.
+@@ -8611,7 +8614,7 @@ pub const ShellIntegrationFeatures = packed struct {
+     cursor: bool = true,
+     sudo: bool = false,
+     title: bool = true,
+-    @"ssh-env": bool = false,
++    @"ssh-env": bool = true,
+     @"ssh-terminfo": bool = false,
+     path: bool = true,
+ };
+diff --git a/src/shell-integration/bash/ghostty.bash b/src/shell-integration/bash/ghostty.bash
+index 48c89164b..119b30585 100644
+--- a/src/shell-integration/bash/ghostty.bash
++++ b/src/shell-integration/bash/ghostty.bash
+@@ -123,8 +123,7 @@ if [[ "$GHOSTTY_SHELL_FEATURES" == *ssh-* ]]; then
+ 
+     # Configure environment variables for remote session
+     if [[ "$GHOSTTY_SHELL_FEATURES" == *ssh-env* ]]; then
+-      ssh_opts+=(-o "SetEnv COLORTERM=truecolor")
+-      ssh_opts+=(-o "SendEnv TERM_PROGRAM TERM_PROGRAM_VERSION")
++      ssh_opts+=(-o "SendEnv COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION")
+     fi
+ 
+     # Install terminfo on remote host if needed
+@@ -144,7 +143,9 @@ if [[ "$GHOSTTY_SHELL_FEATURES" == *ssh-* ]]; then
+ 
+         # Check if terminfo is already cached
+         if "$GHOSTTY_BIN_DIR/ghostty" +ssh-cache --host="$ssh_target" >/dev/null 2>&1; then
+-          ssh_term="xterm-ghostty"
++          # Remote state can change independently of the local cache.
++          # Discard the unverified entry and use the portable fallback.
++          "$GHOSTTY_BIN_DIR/ghostty" +ssh-cache --remove="$ssh_target" >/dev/null 2>&1 || true
+         elif builtin command -v infocmp >/dev/null 2>&1; then
+           builtin local ssh_terminfo ssh_cpath_dir ssh_cpath
+ 
+@@ -159,14 +160,12 @@ if [[ "$GHOSTTY_SHELL_FEATURES" == *ssh-* ]]; then
+             if builtin echo "$ssh_terminfo" | builtin command ssh -o ControlMaster=yes -o ControlPath="$ssh_cpath" -o ControlPersist=60s "$@" '
+               infocmp xterm-ghostty >/dev/null 2>&1 && exit 0
+               command -v tic >/dev/null 2>&1 || exit 1
+-              mkdir -p ~/.terminfo 2>/dev/null && tic -x - 2>/dev/null && exit 0
++              mkdir -p ~/.terminfo 2>/dev/null && tic -x - 2>/dev/null && infocmp xterm-ghostty >/dev/null 2>&1 && exit 0
+               exit 1
+             ' 2>/dev/null; then
+               ssh_term="xterm-ghostty"
+               ssh_opts+=(-o "ControlPath=$ssh_cpath")
+ 
+-              # Cache successful installation
+-              "$GHOSTTY_BIN_DIR/ghostty" +ssh-cache --add="$ssh_target" >/dev/null 2>&1 || true
+             else
+               builtin echo "Warning: Failed to install terminfo." >&2
+             fi
+@@ -180,7 +179,7 @@ if [[ "$GHOSTTY_SHELL_FEATURES" == *ssh-* ]]; then
+     fi
+ 
+     # Execute SSH with TERM environment variable
+-    TERM="$ssh_term" builtin command ssh "${ssh_opts[@]}" "$@"
++    TERM="$ssh_term" COLORTERM=truecolor builtin command ssh "${ssh_opts[@]}" "$@"
+   }
+ fi
+ 
+diff --git a/src/shell-integration/elvish/lib/ghostty-integration.elv b/src/shell-integration/elvish/lib/ghostty-integration.elv
+index 87fd0a902..c17623ed8 100644
+--- a/src/shell-integration/elvish/lib/ghostty-integration.elv
++++ b/src/shell-integration/elvish/lib/ghostty-integration.elv
+@@ -83,8 +83,7 @@
+     # Configure environment variables for remote session
+     if (has-value $features ssh-env) {
+       set ssh-opts = (conj $ssh-opts ^
+-        -o "SetEnv COLORTERM=truecolor" ^
+-        -o "SendEnv TERM_PROGRAM TERM_PROGRAM_VERSION")
++        -o "SendEnv COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION")
+     }
+ 
+     if (has-value $features ssh-terminfo) {
+@@ -114,7 +113,9 @@
+ 
+         # Check if terminfo is already cached
+         if (bool ?($ghostty +ssh-cache --host=$ssh-target)) {
+-          set ssh-term = "xterm-ghostty"
++          # Remote state can change independently of the local cache.
++          # Discard the unverified entry and use the portable fallback.
++          $ghostty +ssh-cache --remove=$ssh-target >/dev/null
+         } elif (has-external infocmp) {
+           var ssh-terminfo = ((external infocmp) -0 -x xterm-ghostty 2>/dev/null | slurp)
+ 
+@@ -128,14 +129,12 @@
+             if (bool ?(echo $ssh-terminfo | (external ssh) $@ssh-opts -o ControlMaster=yes -o ControlPath=$ssh-cpath -o ControlPersist=60s $@args '
+                   infocmp xterm-ghostty >/dev/null 2>&1 && exit 0
+                   command -v tic >/dev/null 2>&1 || exit 1
+-                  mkdir -p ~/.terminfo 2>/dev/null && tic -x - 2>/dev/null && exit 0
++                  mkdir -p ~/.terminfo 2>/dev/null && tic -x - 2>/dev/null && infocmp xterm-ghostty >/dev/null 2>&1 && exit 0
+                   exit 1
+                 ' 2>/dev/null)) {
+               set ssh-term = "xterm-ghostty"
+               set ssh-opts = (conj $ssh-opts -o ControlPath=$ssh-cpath)
+ 
+-              # Cache successful installation
+-              $ghostty +ssh-cache --add=$ssh-target >/dev/null
+             } else {
+               echo "Warning: Failed to install terminfo." >&2
+             }
+@@ -148,7 +147,7 @@
+       }
+     }
+ 
+-    with [E:TERM = $ssh-term] {
++    with [E:TERM = $ssh-term E:COLORTERM = truecolor] {
+       (external ssh) $@ssh-opts $@args
+     }
+   }
+diff --git a/src/shell-integration/fish/vendor_conf.d/ghostty-shell-integration.fish b/src/shell-integration/fish/vendor_conf.d/ghostty-shell-integration.fish
+index 3f1f6099e..969b83073 100644
+--- a/src/shell-integration/fish/vendor_conf.d/ghostty-shell-integration.fish
++++ b/src/shell-integration/fish/vendor_conf.d/ghostty-shell-integration.fish
+@@ -129,8 +129,7 @@ function __ghostty_setup --on-event fish_prompt -d "Setup ghostty integration"
+ 
+             # Configure environment variables for remote session
+             if contains ssh-env $features
+-                set -a ssh_opts -o "SetEnv COLORTERM=truecolor"
+-                set -a ssh_opts -o "SendEnv TERM_PROGRAM TERM_PROGRAM_VERSION"
++                set -a ssh_opts -o "SendEnv COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION"
+             end
+ 
+             # Install terminfo on remote host if needed
+@@ -158,7 +157,9 @@ function __ghostty_setup --on-event fish_prompt -d "Setup ghostty integration"
+ 
+                     # Check if terminfo is already cached
+                     if test -x "$GHOSTTY_BIN_DIR/ghostty"; and "$GHOSTTY_BIN_DIR/ghostty" +ssh-cache --host="$ssh_target" >/dev/null 2>&1
+-                        set ssh_term xterm-ghostty
++                        # Remote state can change independently of the local cache.
++                        # Discard the unverified entry and use the portable fallback.
++                        "$GHOSTTY_BIN_DIR/ghostty" +ssh-cache --remove="$ssh_target" >/dev/null 2>&1; or true
+                     else if command -q infocmp
+                         set -l ssh_terminfo
+                         set -l ssh_cpath_dir
+@@ -175,16 +176,12 @@ function __ghostty_setup --on-event fish_prompt -d "Setup ghostty integration"
+                             if echo "$ssh_terminfo" | command ssh $ssh_opts -o ControlMaster=yes -o ControlPath="$ssh_cpath" -o ControlPersist=60s $argv '
+                                 infocmp xterm-ghostty >/dev/null 2>&1 && exit 0
+                                 command -v tic >/dev/null 2>&1 || exit 1
+-                                mkdir -p ~/.terminfo 2>/dev/null && tic -x - 2>/dev/null && exit 0
++                                mkdir -p ~/.terminfo 2>/dev/null && tic -x - 2>/dev/null && infocmp xterm-ghostty >/dev/null 2>&1 && exit 0
+                                 exit 1
+                             ' 2>/dev/null
+                                 set ssh_term xterm-ghostty
+                                 set -a ssh_opts -o "ControlPath=$ssh_cpath"
+ 
+-                                # Cache successful installation
+-                                if test -x "$GHOSTTY_BIN_DIR/ghostty"
+-                                    "$GHOSTTY_BIN_DIR/ghostty" +ssh-cache --add="$ssh_target" >/dev/null 2>&1; or true
+-                                end
+                             else
+                                 echo "Warning: Failed to install terminfo." >&2
+                             end
+@@ -198,7 +195,7 @@ function __ghostty_setup --on-event fish_prompt -d "Setup ghostty integration"
+             end
+ 
+             # Execute SSH with TERM environment variable
+-            TERM="$ssh_term" command ssh $ssh_opts $argv
++            TERM="$ssh_term" COLORTERM=truecolor command ssh $ssh_opts $argv
+         end
+     end
+ 
+diff --git a/src/shell-integration/nushell/vendor/autoload/ghostty.nu b/src/shell-integration/nushell/vendor/autoload/ghostty.nu
+index 78c981ebe..7520643f5 100644
+--- a/src/shell-integration/nushell/vendor/autoload/ghostty.nu
++++ b/src/shell-integration/nushell/vendor/autoload/ghostty.nu
+@@ -12,9 +12,9 @@ export module ghostty {
+     # `ssh-env`: use xterm-256color and propagate COLORTERM/TERM_PROGRAM vars
+     if (has_feature "ssh-env") {
+       $ssh_env.TERM = "xterm-256color"
++      $ssh_env.COLORTERM = "truecolor"
+       $ssh_opts = [
+-        "-o" "SetEnv COLORTERM=truecolor"
+-        "-o" "SendEnv TERM_PROGRAM TERM_PROGRAM_VERSION"
++        "-o" "SendEnv COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION"
+       ]
+     }
+ 
+@@ -32,7 +32,10 @@ export module ghostty {
+       let ssh_id = $"($ssh_cfg.user)@($ssh_cfg.hostname)"
+ 
+       if (^$ghostty "+ssh-cache" $"--host=($ssh_id)" | complete | $in.exit_code == 0) {
+-        $ssh_env.TERM = "xterm-ghostty"
++        # Remote state can change independently of the local cache.
++        # Discard the unverified entry and use the portable fallback.
++        ^$ghostty "+ssh-cache" $"--remove=($ssh_id)" | complete | ignore
++        $ssh_env.TERM = "xterm-256color"
+       } else {
+         $ssh_env.TERM = "xterm-256color"
+ 
+@@ -59,11 +62,10 @@ export module ghostty {
+           $terminfo | ^ssh ...$remote_args '
+             infocmp xterm-ghostty >/dev/null 2>&1 && exit 0
+             command -v tic >/dev/null 2>&1 || exit 1
+-            mkdir -p ~/.terminfo 2>/dev/null && tic -x - 2>/dev/null && exit 0
++            mkdir -p ~/.terminfo 2>/dev/null && tic -x - 2>/dev/null && infocmp xterm-ghostty >/dev/null 2>&1 && exit 0
+             exit 1'
+           | complete
+           | if $in.exit_code == 0 {
+-            ^$ghostty "+ssh-cache" $"--add=($ssh_id)" e>| print -e
+             $ssh_env.TERM = "xterm-ghostty"
+             $ssh_opts = ($ssh_opts ++ ["-o" $"ControlPath=($ctrl_path)"])
+           } else {
+diff --git a/src/shell-integration/zsh/ghostty-integration b/src/shell-integration/zsh/ghostty-integration
+index dc9bd1605..400e93b18 100644
+--- a/src/shell-integration/zsh/ghostty-integration
++++ b/src/shell-integration/zsh/ghostty-integration
+@@ -325,8 +325,7 @@ _ghostty_deferred_init() {
+ 
+         # Configure environment variables for remote session
+         if [[ "$GHOSTTY_SHELL_FEATURES" == *ssh-env* ]]; then
+-          ssh_opts+=(-o "SetEnv COLORTERM=truecolor")
+-          ssh_opts+=(-o "SendEnv TERM_PROGRAM TERM_PROGRAM_VERSION")
++          ssh_opts+=(-o "SendEnv COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION")
+         fi
+ 
+         # Install terminfo on remote host if needed
+@@ -346,7 +345,9 @@ _ghostty_deferred_init() {
+ 
+             # Check if terminfo is already cached
+             if "$GHOSTTY_BIN_DIR/ghostty" +ssh-cache --host="$ssh_target" >/dev/null 2>&1; then
+-              ssh_term="xterm-ghostty"
++              # Remote state can change independently of the local cache.
++              # Discard the unverified entry and use the portable fallback.
++              "$GHOSTTY_BIN_DIR/ghostty" +ssh-cache --remove="$ssh_target" >/dev/null 2>&1 || true
+             elif (( $+commands[infocmp] )); then
+               local ssh_terminfo ssh_cpath_dir ssh_cpath
+ 
+@@ -361,14 +362,12 @@ _ghostty_deferred_init() {
+                 if builtin print -r "$ssh_terminfo" | command ssh "${ssh_opts[@]}" -o ControlMaster=yes -o ControlPath="$ssh_cpath" -o ControlPersist=60s "$@" '
+                   infocmp xterm-ghostty >/dev/null 2>&1 && exit 0
+                   command -v tic >/dev/null 2>&1 || exit 1
+-                  mkdir -p ~/.terminfo 2>/dev/null && tic -x - 2>/dev/null && exit 0
++                  mkdir -p ~/.terminfo 2>/dev/null && tic -x - 2>/dev/null && infocmp xterm-ghostty >/dev/null 2>&1 && exit 0
+                   exit 1
+                 ' 2>/dev/null; then
+                   ssh_term="xterm-ghostty"
+                   ssh_opts+=(-o "ControlPath=$ssh_cpath")
+ 
+-                  # Cache successful installation
+-                  "$GHOSTTY_BIN_DIR/ghostty" +ssh-cache --add="$ssh_target" >/dev/null 2>&1 || true
+                 else
+                   print "Warning: Failed to install terminfo." >&2
+                 fi
+@@ -382,7 +381,7 @@ _ghostty_deferred_init() {
+         fi
+ 
+         # Execute SSH with TERM environment variable
+-        TERM="$ssh_term" command ssh "${ssh_opts[@]}" "$@"
++        TERM="$ssh_term" COLORTERM=truecolor command ssh "${ssh_opts[@]}" "$@"
+       }
+     fi
+ 
+diff --git a/src/termio/shell_integration.zig b/src/termio/shell_integration.zig
+index e5b9eab10..014374691 100644
+--- a/src/termio/shell_integration.zig
++++ b/src/termio/shell_integration.zig
+@@ -242,6 +242,15 @@ test "setup features" {
+     defer arena.deinit();
+     const alloc = arena.allocator();
+ 
++    // The default features include the portable SSH TERM fallback.
++    {
++        var env = EnvMap.init(alloc);
++        defer env.deinit();
++
++        try setupFeatures(&env, .{}, true);
++        try testing.expectEqualStrings("cursor:blink,path,ssh-env,title", env.get("GHOSTTY_SHELL_FEATURES").?);
++    }
++
+     // Test: all features enabled
+     {
+         var env = EnvMap.init(alloc);
+-- 
+2.55.0
+

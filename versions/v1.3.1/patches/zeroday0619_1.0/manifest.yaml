@@ -1,0 +1,10 @@
+inherits: "minacle1.0"
+
+features:
+  ssh-terminfo-fallback:
+    name: SSH terminfo fallback
+    description: |
+      Default to xterm-256color for portable local and remote sessions.
+      Advertise xterm-ghostty over integrated SSH only after verifying
+      that the remote host supports it.
+    dependencies: []
