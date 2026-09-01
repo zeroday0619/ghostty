@@ -1,6 +1,18 @@
 inherits: "minacle1.0"
 
 features:
+  xcode-27-sdk-headers:
+    name: Xcode 27 SDK headers
+    description: |
+      Backport Ghostty #13419 for Zig 0.15.2 builds against Xcode 27.
+      Supply the INFINITY and NAN definitions expected by the macOS SDK.
+    dependencies: []
+  xcode-27-archive-alignment:
+    name: Xcode 27 archive alignment
+    description: |
+      Normalize Zig-produced static archives before Darwin libtool merges.
+      Prevent newer Xcode tools from silently dropping misaligned members.
+    dependencies: []
   ssh-terminfo-fallback:
     name: SSH terminfo fallback
     description: |
