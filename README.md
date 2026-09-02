@@ -22,11 +22,10 @@ uri vanish <ID>
 
 ## Build `tip` on macOS
 
-Ghostty `tip` currently requires Zig `0.16.0`. Follow the upstream macOS workflow:
+Ghostty `tip` currently requires Zig `0.16.0`. Build the complete macOS app with:
 
 ```sh
-zig version
-macos/build.nu --configuration ReleaseLocal --action build
+zig build -Doptimize=ReleaseFast
 ```
 
 ## Pinned `v1.3.1`
