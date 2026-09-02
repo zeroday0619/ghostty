@@ -1,0 +1,11 @@
+inherits:
+  upstream-version: tip
+  patchset-version: minacle1.0
+
+features:
+  ssh-terminfo-fallback:
+    name: SSH TERM fallback
+    description: |
+      Keep local TERM=xterm-ghostty and use xterm-256color for integrated SSH by default.
+    dependencies: []
+    dev-dependencies: []

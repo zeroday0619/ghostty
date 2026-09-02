@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Euiseo Cha <escha@zeroday0619.dev>
+Date: Wed, 2 Sep 2026 15:14:14 +0900
+Subject: [PATCH] fix(ssh): enable portable TERM forwarding by default
+
+The tip tag already keeps local sessions on xterm-ghostty and routes integrated shell wrappers through ghostty +ssh. However, both SSH integration features are disabled by default, so ordinary ssh commands bypass the portable TERM selection.
+
+Enable ssh-env by default. Loaded shell integrations now invoke ghostty +ssh with terminfo disabled unless explicitly requested, causing ordinary remote sessions to use xterm-256color while local sessions retain xterm-ghostty. Add a regression test for the default feature environment.
+
+Validation:
+- Passed zig fmt --check for the modified Zig files.
+- Passed zig build test -Dtest-filter=setup features with Zig 0.16.0.
+- Passed git diff --check.
+- Live remote SSH requires verification.
+
+Assisted-by: Codex:gpt-daybreak-blue-latest
+
+diff --git a/src/config/Config.zig b/src/config/Config.zig
+index bf4e75f..b614e18 100644
+--- a/src/config/Config.zig
++++ b/src/config/Config.zig
+@@ -2964,6 +2964,8 @@ keybind: Keybinds = .{},
+ ///     remote hosts and propagates COLORTERM, TERM_PROGRAM, and TERM_PROGRAM_VERSION.
+ ///     Whether or not these variables will be accepted by the remote host(s) will
+ ///     depend on whether or not the variables are allowed in their sshd_config.
++///     This feature is enabled by default so integrated SSH sessions use
++///     `xterm-256color` without requiring Ghostty's terminfo entry remotely.
+ ///     (Available since: 1.2.0)
+ ///
+ ///   * `ssh-terminfo` - Enable automatic terminfo installation on remote hosts.
+@@ -8825,7 +8827,7 @@ pub const ShellIntegrationFeatures = packed struct {
+     cursor: bool = true,
+     sudo: bool = false,
+     title: bool = true,
+-    @"ssh-env": bool = false,
++    @"ssh-env": bool = true,
+     @"ssh-terminfo": bool = false,
+     path: bool = true,
+ };
+diff --git a/src/termio/shell_integration.zig b/src/termio/shell_integration.zig
+index d56a84c..4fe7570 100644
+--- a/src/termio/shell_integration.zig
++++ b/src/termio/shell_integration.zig
+@@ -243,6 +243,15 @@ test "setup features" {
+     defer arena.deinit();
+     const alloc = arena.allocator();
+ 
++    // The default features enable portable SSH TERM forwarding.
++    {
++        var env = EnvMap.init(alloc);
++        defer env.deinit();
++
++        try setupFeatures(&env, .{}, true);
++        try testing.expectEqualStrings("cursor:blink,path,ssh-env,title", env.get("GHOSTTY_SHELL_FEATURES").?);
++    }
++
+     // Test: all features enabled
+     {
+         var env = EnvMap.init(alloc);
