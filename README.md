@@ -10,7 +10,9 @@ Install [`uri`](https://github.com/uri-life/uri), clone this repository, move in
 uri apply v1.3.1 zeroday0619_1.0 --ephemeral
 ```
 
-This command creates an isolated workspace for Ghostty `v1.3.1`, applies the full inherited patch graph, and reports the location and ID of the created workspace. When you are finished, remove the workspace with:
+This command creates an isolated workspace for Ghostty `v1.3.1`, applies the full inherited patch graph, and reports the location and ID of the created workspace. Local sessions keep `TERM=xterm-ghostty`. When Ghostty shell integration is active, its `ssh` wrapper uses `TERM=xterm-256color` by default and selects `xterm-ghostty` only when explicitly enabled `ssh-terminfo` verifies the remote entry.
+
+Direct `/usr/bin/ssh`, `command ssh`, unsupported shells, and disabled shell integration bypass the wrapper. When you are finished, remove the workspace with:
 
 ```sh
 uri vanish <ID>

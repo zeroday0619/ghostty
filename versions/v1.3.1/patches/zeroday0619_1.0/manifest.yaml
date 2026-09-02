@@ -16,7 +16,8 @@ features:
   ssh-terminfo-fallback:
     name: SSH terminfo fallback
     description: |
-      Default to xterm-256color for portable local and remote sessions.
-      Advertise xterm-ghostty over integrated SSH only after verifying
+      Keep xterm-ghostty for local sessions and use xterm-256color for
+      integrated SSH sessions. Advertise xterm-ghostty over SSH only after
+      explicit ssh-terminfo verification confirms
       that the remote host supports it.
     dependencies: []

@@ -1,51 +1,31 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Euiseo Cha <escha@zeroday0619.dev>
-Date: Mon, 31 Aug 2026 15:18:41 +0900
-Subject: [PATCH] fix(ssh): prevent unsupported Ghostty TERM on remote hosts
+Date: Wed, 2 Sep 2026 14:26:58 +0900
+Subject: [PATCH] fix(ssh): use portable TERM for integrated SSH
 
-Use xterm-256color as the default terminal type and enable the portable
-SSH environment fallback by default. This covers ordinary shell wrappers,
-absolute ssh paths, unsupported shells, and shell integration bypasses
-without requiring Ghostty terminfo on the remote host.
+Keep Ghostty's xterm-ghostty default for local applications. Enable ssh-env by default so loaded shell integrations run wrapped ssh commands with xterm-256color and forward Ghostty environment metadata without replacing user SetEnv configuration.
 
-Cached installation records can outlive remote hosts and home
-directories. Discard unverified cache hits, stop creating new trust-only
-cache records, and require a post-install infocmp check before selecting
-xterm-ghostty. Preserve user SetEnv configuration while forwarding
-Ghostty environment metadata. Users can still opt into xterm-ghostty with
-an explicit `term` configuration when every target supports that entry.
+When ssh-terminfo is explicitly enabled, discard unverified cache entries and select xterm-ghostty only after the current remote entry or installation passes infocmp. Direct binary paths, command ssh, unsupported shells, and disabled shell integration bypass the wrapper and retain the local TERM.
 
 Validation:
-- Passed Bash 3.2 stale-cache, install-success, and install-failure behavior tests.
-- Passed Zsh 5.9 stale-cache, install-success, and install-failure behavior tests.
-- Passed bash -n, zsh -n, ShellCheck, and git diff --check.
-- Fish, Nushell, Elvish, and Zig execution were not performed because the required tools are unavailable.
+- Verified Bash 3.2 keeps local TERM=xterm-ghostty and sets TERM=xterm-256color only for wrapped ssh.
+- Verified Zsh 5.9 keeps local TERM=xterm-ghostty and sets TERM=xterm-256color only for wrapped ssh.
+- Verified command ssh bypasses retain TERM=xterm-ghostty as the documented limitation.
+- Passed bash -n, zsh -n, ShellCheck, Zig formatting, and git diff --check.
+- Fish, Nushell, Elvish, and live remote SSH require verification.
 
 Assisted-by: Codex:gpt-daybreak-blue-latest
 
-diff --git a/src/build/mdgen/ghostty_1_footer.md b/src/build/mdgen/ghostty_1_footer.md
-index a63a85f..e39278c 100644
---- a/src/build/mdgen/ghostty_1_footer.md
-+++ b/src/build/mdgen/ghostty_1_footer.md
-@@ -18,7 +18,7 @@ for configuration files.
- 
- **TERM**
- 
--: Defaults to `xterm-ghostty`. Can be configured with the `term` configuration option.
-+: Defaults to `xterm-256color`. Can be configured with the `term` configuration option.
- 
- **GHOSTTY_RESOURCES_DIR**
- 
 diff --git a/src/config/Config.zig b/src/config/Config.zig
-index 278ffd7..d88309a 100644
+index 278ffd7..76b9c78 100644
 --- a/src/config/Config.zig
 +++ b/src/config/Config.zig
 @@ -2803,15 +2803,18 @@ keybind: Keybinds = .{},
  ///     remote hosts and propagates COLORTERM, TERM_PROGRAM, and TERM_PROGRAM_VERSION.
  ///     Whether or not these variables will be accepted by the remote host(s) will
  ///     depend on whether or not the variables are allowed in their sshd_config.
-+///     This feature is enabled by default so remote hosts do not need Ghostty's
-+///     terminfo entry for ordinary SSH sessions.
++///     This feature is enabled by default so integrated SSH sessions use
++///     `xterm-256color` without requiring Ghostty's terminfo entry remotely.
  ///     (Available since: 1.2.0)
  ///
  ///   * `ssh-terminfo` - Enable automatic terminfo installation on remote hosts.
@@ -63,24 +43,6 @@ index 278ffd7..d88309a 100644
  ///     (Available since: 1.2.0)
  ///
  ///   * `path` - Add Ghostty's binary directory to PATH. This ensures the `ghostty`
-@@ -3682,7 +3685,7 @@ else
- /// features. An option exists in vim to modify this: `:set
- /// keyprotocol=ghostty:kitty`, however a bug in the implementation prevents it
- /// from working properly. https://github.com/vim/vim/pull/13211 fixes this.
--term: []const u8 = "xterm-ghostty",
-+term: []const u8 = "xterm-256color",
- 
- /// String to send when we receive `ENQ` (`0x05`) from the command that we are
- /// running. Defaults to an empty string if not set.
-@@ -4519,7 +4522,7 @@ pub fn finalize(self: *Config) !void {
-     // Prevent setting TERM to an empty string
-     if (self.term.len == 0) {
-         // HACK: See comment above at definition
--        self.term = "xterm-ghostty";
-+        self.term = "xterm-256color";
-     }
- 
-     // The default for the working directory depends on the system.
 @@ -8611,7 +8614,7 @@ pub const ShellIntegrationFeatures = packed struct {
      cursor: bool = true,
      sudo: bool = false,
