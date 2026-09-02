@@ -24,3 +24,19 @@ Ghostty `v1.3.1` requires Zig `0.15.2`. The patch graph includes compatibility f
 brew install zig@0.15
 /opt/homebrew/opt/zig@0.15/bin/zig build -Doptimize=ReleaseFast
 ```
+
+## Author patches with URI
+
+Use [URI `2.0.0-rc.5`](https://github.com/uri-life/uri/releases/tag/v2.0.0-rc.5) to generate patch files. Do not run `git format-patch` directly. URI reconstructs and validates the selected feature before replacing its patch transactionally.
+
+```sh
+uri expand . v1.3.1 zeroday0619_1.0 <FEATURE> --ephemeral <ID>
+```
+
+Edit, stage, and commit the feature changes in the workspace reported by URI. The worktree must be clean before generating the patch:
+
+```sh
+uri collapse --ephemeral <ID>
+```
+
+Successful collapse writes `versions/v1.3.1/patches/zeroday0619_1.0/<FEATURE>.patch` and removes the ephemeral workspace. Use `--recursive` only when dependency patches must also be regenerated.

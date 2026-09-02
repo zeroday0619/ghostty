@@ -1,4 +1,4 @@
-From b425723775aa3d9d29a0a33ea87291c3ba0826fd Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Euiseo Cha <escha@zeroday0619.dev>
 Date: Mon, 31 Aug 2026 15:18:41 +0900
 Subject: [PATCH] fix(ssh): prevent unsupported Ghostty TERM on remote hosts
@@ -22,19 +22,9 @@ Validation:
 - Fish, Nushell, Elvish, and Zig execution were not performed because the required tools are unavailable.
 
 Assisted-by: Codex:gpt-daybreak-blue-latest
----
- src/build/mdgen/ghostty_1_footer.md             |  2 +-
- src/config/Config.zig                           | 17 ++++++++++-------
- src/shell-integration/bash/ghostty.bash         | 13 ++++++-------
- .../elvish/lib/ghostty-integration.elv          | 13 ++++++-------
- .../ghostty-shell-integration.fish              | 15 ++++++---------
- .../nushell/vendor/autoload/ghostty.nu          | 12 +++++++-----
- src/shell-integration/zsh/ghostty-integration   | 13 ++++++-------
- src/termio/shell_integration.zig                |  9 +++++++++
- 8 files changed, 51 insertions(+), 43 deletions(-)
 
 diff --git a/src/build/mdgen/ghostty_1_footer.md b/src/build/mdgen/ghostty_1_footer.md
-index a63a85fd4..e39278c0e 100644
+index a63a85f..e39278c 100644
 --- a/src/build/mdgen/ghostty_1_footer.md
 +++ b/src/build/mdgen/ghostty_1_footer.md
 @@ -18,7 +18,7 @@ for configuration files.
@@ -47,7 +37,7 @@ index a63a85fd4..e39278c0e 100644
  **GHOSTTY_RESOURCES_DIR**
  
 diff --git a/src/config/Config.zig b/src/config/Config.zig
-index 278ffd7e2..d88309a8e 100644
+index 278ffd7..d88309a 100644
 --- a/src/config/Config.zig
 +++ b/src/config/Config.zig
 @@ -2803,15 +2803,18 @@ keybind: Keybinds = .{},
@@ -101,7 +91,7 @@ index 278ffd7e2..d88309a8e 100644
      path: bool = true,
  };
 diff --git a/src/shell-integration/bash/ghostty.bash b/src/shell-integration/bash/ghostty.bash
-index 48c89164b..119b30585 100644
+index 48c8916..119b305 100644
 --- a/src/shell-integration/bash/ghostty.bash
 +++ b/src/shell-integration/bash/ghostty.bash
 @@ -123,8 +123,7 @@ if [[ "$GHOSTTY_SHELL_FEATURES" == *ssh-* ]]; then
@@ -151,7 +141,7 @@ index 48c89164b..119b30585 100644
  fi
  
 diff --git a/src/shell-integration/elvish/lib/ghostty-integration.elv b/src/shell-integration/elvish/lib/ghostty-integration.elv
-index 87fd0a902..c17623ed8 100644
+index 87fd0a9..c17623e 100644
 --- a/src/shell-integration/elvish/lib/ghostty-integration.elv
 +++ b/src/shell-integration/elvish/lib/ghostty-integration.elv
 @@ -83,8 +83,7 @@
@@ -201,7 +191,7 @@ index 87fd0a902..c17623ed8 100644
      }
    }
 diff --git a/src/shell-integration/fish/vendor_conf.d/ghostty-shell-integration.fish b/src/shell-integration/fish/vendor_conf.d/ghostty-shell-integration.fish
-index 3f1f6099e..969b83073 100644
+index 3f1f609..969b830 100644
 --- a/src/shell-integration/fish/vendor_conf.d/ghostty-shell-integration.fish
 +++ b/src/shell-integration/fish/vendor_conf.d/ghostty-shell-integration.fish
 @@ -129,8 +129,7 @@ function __ghostty_setup --on-event fish_prompt -d "Setup ghostty integration"
@@ -253,7 +243,7 @@ index 3f1f6099e..969b83073 100644
      end
  
 diff --git a/src/shell-integration/nushell/vendor/autoload/ghostty.nu b/src/shell-integration/nushell/vendor/autoload/ghostty.nu
-index 78c981ebe..7520643f5 100644
+index 78c981e..7520643 100644
 --- a/src/shell-integration/nushell/vendor/autoload/ghostty.nu
 +++ b/src/shell-integration/nushell/vendor/autoload/ghostty.nu
 @@ -12,9 +12,9 @@ export module ghostty {
@@ -294,7 +284,7 @@ index 78c981ebe..7520643f5 100644
              $ssh_opts = ($ssh_opts ++ ["-o" $"ControlPath=($ctrl_path)"])
            } else {
 diff --git a/src/shell-integration/zsh/ghostty-integration b/src/shell-integration/zsh/ghostty-integration
-index dc9bd1605..400e93b18 100644
+index dc9bd16..400e93b 100644
 --- a/src/shell-integration/zsh/ghostty-integration
 +++ b/src/shell-integration/zsh/ghostty-integration
 @@ -325,8 +325,7 @@ _ghostty_deferred_init() {
@@ -344,7 +334,7 @@ index dc9bd1605..400e93b18 100644
      fi
  
 diff --git a/src/termio/shell_integration.zig b/src/termio/shell_integration.zig
-index e5b9eab10..014374691 100644
+index e5b9eab..0143746 100644
 --- a/src/termio/shell_integration.zig
 +++ b/src/termio/shell_integration.zig
 @@ -242,6 +242,15 @@ test "setup features" {
@@ -363,6 +353,3 @@ index e5b9eab10..014374691 100644
      // Test: all features enabled
      {
          var env = EnvMap.init(alloc);
--- 
-2.55.0
-

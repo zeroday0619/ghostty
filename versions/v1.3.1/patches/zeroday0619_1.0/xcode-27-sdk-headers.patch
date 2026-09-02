@@ -1,4 +1,4 @@
-From 5071858ddf29a688756b61ff6abf2d48bfc86df8 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Euiseo Cha <escha@zeroday0619.dev>
 Date: Tue, 1 Sep 2026 10:05:31 +0900
 Subject: [PATCH] fix(build): support Xcode 27 SDK headers
@@ -17,14 +17,9 @@ Validation:
 - Based on upstream Ghostty commit ab0b9da9e88fcb4b0533a1854e84628f663930af.
 
 Assisted-by: Codex:gpt-daybreak-blue-latest
----
- pkg/apple-sdk/build.zig      | 16 +++++++++++++++-
- pkg/apple-sdk/include/math.h | 20 ++++++++++++++++++++
- 2 files changed, 35 insertions(+), 1 deletion(-)
- create mode 100644 pkg/apple-sdk/include/math.h
 
 diff --git a/pkg/apple-sdk/build.zig b/pkg/apple-sdk/build.zig
-index c573c3910..16137f307 100644
+index c573c39..16137f3 100644
 --- a/pkg/apple-sdk/build.zig
 +++ b/pkg/apple-sdk/build.zig
 @@ -44,12 +44,26 @@ pub fn addPaths(
@@ -57,7 +52,7 @@ index c573c3910..16137f307 100644
          defer stream.deinit();
 diff --git a/pkg/apple-sdk/include/math.h b/pkg/apple-sdk/include/math.h
 new file mode 100644
-index 000000000..9a25e9579
+index 0000000..9a25e95
 --- /dev/null
 +++ b/pkg/apple-sdk/include/math.h
 @@ -0,0 +1,20 @@
@@ -81,5 +76,3 @@ index 000000000..9a25e9579
 +#endif
 +
 +#endif
--- 
-2.55.0
